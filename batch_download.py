@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 """
 批量下载脚本 - 读取 keywords.yaml 按 D5 光照类型批量下载 Unsplash 图片
 
@@ -40,22 +41,39 @@ from download import (
 import requests
 from tqdm import tqdm
 
-# Demo key: 50 次/小时；生产 key: 5000 次/小时
-DEFAULT_HOURLY_LIMIT = 48  # 留 2 次余量
 GLOBAL_REGISTRY_FILE = "global_registry.json"
 
 
 class RateLimiter:
-    def __init__(self, hourly_limit: int):
-        self.min_interval = 3600.0 / hourly_limit
-        self._last_call = 0.0
+    """突发模式：请求自由发出，仅当配额耗尽时等待窗口重置。"""
 
-    def wait(self):
-        elapsed = time.time() - self._last_call
-        wait_time = self.min_interval - elapsed
-        if wait_time > 0:
-            time.sleep(wait_time)
-        self._last_call = time.time()
+    def __init__(self):
+        self.remaining = 50   # 乐观初值，首次响应后立即更新
+        self.reset_ts = 0
+
+    def update(self, resp_headers: dict):
+        raw = resp_headers.get("X-Ratelimit-Remaining")
+        if raw is not None:
+            self.remaining = int(raw)
+        raw_reset = resp_headers.get("X-Ratelimit-Reset")
+        if raw_reset is not None:
+            self.reset_ts = int(raw_reset)
+
+    def seconds_until_reset(self) -> int:
+        now = int(time.time())
+        if self.reset_ts > now:
+            return self.reset_ts - now + 5
+        # reset_ts 未知或已过期：等到下一个整点小时
+        next_hour = (now // 3600 + 1) * 3600
+        return next_hour - now + 5
+
+    def wait_if_exhausted(self):
+        if self.remaining <= 1:
+            wait_sec = self.seconds_until_reset()
+            mins, secs = divmod(wait_sec, 60)
+            print(f"\n[配额耗尽] 剩余 {self.remaining} 次，等待 {mins}分{secs}秒 直到窗口重置...")
+            time.sleep(wait_sec)
+            self.remaining = 50  # 重置后恢复乐观值
 
 
 def load_global_registry(output_root: Path) -> dict:
@@ -203,19 +221,25 @@ def search_photos_with_ratelimit(
     headers = {"Authorization": f"Client-ID {access_key}"}
 
     while len(photos) < count:
-        rate_limiter.wait()
+        rate_limiter.wait_if_exhausted()
         resp = requests.get(
             f"{UNSPLASH_API_BASE}/search/photos",
             params={"query": query, "per_page": per_page, "page": page},
             headers=headers,
             timeout=30,
         )
-        remaining = int(resp.headers.get("X-Ratelimit-Remaining", 999))
-        if remaining < 5:
-            reset_ts = int(resp.headers.get("X-Ratelimit-Reset", 0))
-            wait_sec = max(0, reset_ts - int(time.time())) + 5
-            print(f"\n[速率限制] 剩余配额 {remaining}，等待 {wait_sec}s ...")
+        rate_limiter.update(resp.headers)
+        reset_time = datetime.datetime.fromtimestamp(rate_limiter.reset_ts).strftime("%H:%M:%S") if rate_limiter.reset_ts else "unknown"
+        print(f"  [配额] 剩余 {rate_limiter.remaining}/50，窗口重置于 {reset_time}")
+
+        if resp.status_code == 403:
+            wait_sec = rate_limiter.seconds_until_reset()
+            mins, secs = divmod(wait_sec, 60)
+            wake_time = datetime.datetime.fromtimestamp(int(time.time()) + wait_sec).strftime("%H:%M:%S")
+            print(f"\n[403 限流] 配额已用尽，等待 {mins}分{secs}秒（至 {wake_time}）后重试...")
             time.sleep(wait_sec)
+            rate_limiter.remaining = 50
+            continue  # 重试当前页，不递增 page
 
         resp.raise_for_status()
         results = resp.json().get("results", [])
@@ -318,12 +342,6 @@ def main():
         help="只下载指定 D5 类型（逗号分隔），如 golden_hour,rim_light",
     )
     parser.add_argument(
-        "--rate-limit",
-        type=int,
-        default=DEFAULT_HOURLY_LIMIT,
-        help=f"每小时最大 search 请求次数（默认 {DEFAULT_HOURLY_LIMIT}）",
-    )
-    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="只打印任务列表，不实际下载",
@@ -364,13 +382,10 @@ def main():
 
     total_target = sum(j["count"] for j in jobs)
     total_search_req = sum(math.ceil(j["count"] / 30) for j in jobs)
-    # --fetch-exif 每张额外 1 次 /photos/{id} 请求，计入速率估算
-    total_api_req = total_search_req + (total_target if args.fetch_exif else 0)
-    estimated_hours = total_api_req / args.rate_limit
+    exif_note = f"（含 EXIF 请求 {total_target} 次）" if args.fetch_exif else ""
 
     print(f"共 {len(jobs)} 个下载任务，目标图片总数：{total_target} 张")
-    exif_note = f"（含 EXIF 请求 {total_target} 次）" if args.fetch_exif else ""
-    print(f"估算 API 请求：{total_api_req} 次{exif_note}，约需 {estimated_hours:.1f} 小时（API 等待）")
+    print(f"估算 search 请求：{total_search_req} 次{exif_note}（Demo key 50次/小时，突发模式）")
 
     if args.dry_run:
         print("\n[Dry Run] 任务列表：")
@@ -385,7 +400,7 @@ def main():
     print(f"全局注册表已加载，已记录 {len(global_registry)} 张图片")
 
     access_key = get_access_key()
-    rate_limiter = RateLimiter(args.rate_limit)
+    rate_limiter = RateLimiter()
 
     total_downloaded = 0
     skipped = 0
