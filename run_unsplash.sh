@@ -57,26 +57,26 @@ cmd_install() {
 
 cmd_stats() {
   check_env
-  "$PYTHON" batch_download.py --config "$CONFIG" --stats
+  "$PYTHON" batch_download_unsplash.py --config "$CONFIG" --stats
   echo "统计表路径：$SCRIPT_DIR/downloads/stats.md"
 }
 
 cmd_dry() {
   check_env
-  "$PYTHON" batch_download.py --config "$CONFIG" --dry-run
+  "$PYTHON" batch_download_unsplash.py --config "$CONFIG" --dry-run
 }
 
 cmd_all() {
   check_env
   echo "开始全量下载（突发模式，配额耗尽自动等待重置）..."
-  "$PYTHON" batch_download.py --config "$CONFIG"
+  "$PYTHON" batch_download_unsplash.py --config "$CONFIG"
 }
 
 cmd_d5() {
   local d5_types="$1"
   check_env
   echo "下载 D5 类型：$d5_types（突发模式）..."
-  "$PYTHON" batch_download.py --config "$CONFIG" --d5 "$d5_types"
+  "$PYTHON" batch_download_unsplash.py --config "$CONFIG" --d5 "$d5_types"
 }
 
 # ── 入口 ──────────────────────────────────────────
