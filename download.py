@@ -87,7 +87,22 @@ def download_image(url: str, dest: Path) -> bool:
         return False
 
 
-def save_metadata(photo: dict, dest: Path, labels: dict | None = None):
+def fetch_photo_detail(photo_id: str, access_key: str) -> dict:
+    resp = requests.get(
+        f"{UNSPLASH_API_BASE}/photos/{photo_id}",
+        headers={"Authorization": f"Client-ID {access_key}"},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def save_metadata(
+    photo: dict,
+    dest: Path,
+    labels: dict | None = None,
+    detail: dict | None = None,
+):
     meta = {
         "id": photo.get("id"),
         "description": photo.get("description"),
@@ -95,6 +110,9 @@ def save_metadata(photo: dict, dest: Path, labels: dict | None = None):
         "width": photo.get("width"),
         "height": photo.get("height"),
         "created_at": photo.get("created_at"),
+        "color": photo.get("color"),
+        "likes": photo.get("likes"),
+        "tags": [t.get("title") for t in photo.get("tags", [])],
         "urls": photo.get("urls"),
         "user": {
             "name": photo.get("user", {}).get("name"),
@@ -103,6 +121,9 @@ def save_metadata(photo: dict, dest: Path, labels: dict | None = None):
         },
         "links": photo.get("links"),
     }
+    if detail:
+        meta["exif"] = detail.get("exif")
+        meta["location"] = detail.get("location")
     if labels:
         meta["labels"] = labels
     with open(dest, "w", encoding="utf-8") as f:
@@ -121,6 +142,11 @@ def main():
         help="图片分辨率：raw/full/regular/small/thumb（默认 regular）",
     )
     parser.add_argument("-o", "--output", default="./downloads", help="输出目录（默认 ./downloads）")
+    parser.add_argument(
+        "--fetch-exif",
+        action="store_true",
+        help="额外调用 /photos/{id} 获取 EXIF 和地理位置信息（每张多 1 次 API 请求）",
+    )
     args = parser.parse_args()
 
     access_key = get_access_key()
@@ -151,7 +177,8 @@ def main():
 
         photo_dir = keyword_dir / photo_id
         photo_dir.mkdir(exist_ok=True)
-        save_metadata(photo, photo_dir / f"{photo_id}.json")
+        detail = fetch_photo_detail(photo_id, access_key) if args.fetch_exif else None
+        save_metadata(photo, photo_dir / f"{photo_id}.json", detail=detail)
         trigger_download_event(photo_id, access_key)
 
         if download_image(image_url, photo_dir / f"{photo_id}.jpg"):

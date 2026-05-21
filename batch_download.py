@@ -10,10 +10,13 @@
   python batch_download.py --d5 golden_hour        # 只下载某 D5 类型
   python batch_download.py --d5 rim_light,tyndall  # 多个 D5 类型
   python batch_download.py --dry-run               # 仅打印任务列表和估算时间
+  python batch_download.py --stats                 # 生成下载统计表到 downloads/stats.md
   python batch_download.py --rate-limit 40         # 每小时限制 40 次 search 请求
+  python batch_download.py --fetch-exif            # 额外获取 EXIF 和地理位置信息
 """
 
 import argparse
+import datetime
 import json
 import math
 import os
@@ -26,6 +29,7 @@ from download import (
     UNSPLASH_API_BASE,
     VALID_SIZES,
     download_image,
+    fetch_photo_detail,
     get_access_key,
     load_progress,
     save_progress,
@@ -110,6 +114,83 @@ def extract_jobs(config: dict, filter_d5: list | None = None) -> list:
     return jobs
 
 
+def collect_stats(jobs: list, output_root: Path) -> dict:
+    registry = load_global_registry(output_root)
+    unique_total = len(registry)
+    global_target = sum(j["count"] for j in jobs)
+
+    groups: dict = {}
+    for job in jobs:
+        d5 = job["d5"]
+        progress_file = Path(job["output_dir"]) / "progress.json"
+        downloaded = len(load_progress(progress_file))
+
+        if d5 not in groups:
+            groups[d5] = {"target": 0, "downloaded": 0, "jobs": []}
+        groups[d5]["target"] += job["count"]
+        groups[d5]["downloaded"] += downloaded
+        groups[d5]["jobs"].append({
+            "query": job["query"],
+            "downloaded": downloaded,
+            "target": job["count"],
+        })
+
+    return {
+        "generated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "unique_total": unique_total,
+        "global_target": global_target,
+        "groups": groups,
+    }
+
+
+def _progress_bar(downloaded: int, target: int, width: int = 10) -> str:
+    pct = downloaded / target if target > 0 else 0
+    filled = round(pct * width)
+    bar = "█" * filled + "░" * (width - filled)
+    return f"{bar} {pct*100:5.1f}%"
+
+
+def write_stats_md(stats: dict, output_path: Path):
+    lines = []
+    lines.append("# Unsplash 下载统计")
+    lines.append(
+        f"更新时间：{stats['generated_at']} | "
+        f"唯一图片（实体）：{stats['unique_total']} 张 | "
+        f"全局目标：{stats['global_target']} 张"
+    )
+    lines.append("")
+
+    total_downloaded = sum(g["downloaded"] for g in stats["groups"].values())
+    overall_bar = _progress_bar(total_downloaded, stats["global_target"])
+    lines.append(f"**总进度：{total_downloaded} / {stats['global_target']} 张  {overall_bar}**")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    for d5, group in stats["groups"].items():
+        g_bar = _progress_bar(group["downloaded"], group["target"])
+        lines.append(f"### {d5} — {group['downloaded']} / {group['target']} 张  {g_bar}")
+        lines.append("")
+        lines.append("| 查询关键词 | 已下载 | 目标 | 进度 |")
+        lines.append("|---|---|---|---|")
+        for job in group["jobs"]:
+            bar = _progress_bar(job["downloaded"], job["target"])
+            lines.append(
+                f"| {job['query']} | {job['downloaded']} | {job['target']} | {bar} |"
+            )
+        lines.append("")
+
+    n_jobs = sum(len(g["jobs"]) for g in stats["groups"].values())
+    n_d5 = len(stats["groups"])
+    lines.append("---")
+    lines.append(f"*共 {n_jobs} 个 job，{n_d5} 种 D5 光照类型*")
+
+    tmp = output_path.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    os.replace(tmp, output_path)
+
+
 def search_photos_with_ratelimit(
     query: str,
     count: int,
@@ -154,6 +235,7 @@ def run_job(
     rate_limiter: RateLimiter,
     global_registry: dict,
     output_root: Path,
+    fetch_exif: bool = False,
 ) -> int:
     query = job["query"]
     count = job["count"]
@@ -187,10 +269,12 @@ def run_job(
         photo_dir.mkdir(exist_ok=True)
 
         # JSON 元数据始终独立写入（各 query 的 labels 不同）
+        detail = fetch_photo_detail(photo_id, access_key) if fetch_exif else None
         save_metadata(
             photo,
             photo_dir / f"{photo_id}.json",
             labels={"d5_lighting": d5, "d2_subject": d2},
+            detail=detail,
         )
 
         jpg_path = photo_dir / f"{photo_id}.jpg"
@@ -244,22 +328,49 @@ def main():
         action="store_true",
         help="只打印任务列表，不实际下载",
     )
+    parser.add_argument(
+        "--stats",
+        action="store_true",
+        help="生成下载统计表到 downloads/stats.md",
+    )
+    parser.add_argument(
+        "--fetch-exif",
+        action="store_true",
+        help="额外调用 /photos/{id} 获取 EXIF 和地理位置信息（每张多 1 次 API 请求）",
+    )
     args = parser.parse_args()
 
     config = load_config(Path(args.config))
     filter_d5 = [x.strip() for x in args.d5.split(",")] if args.d5 else None
+    # --stats 模式加载全部 job（忽略 --d5 过滤，反映完整进度）
+    stats_jobs = extract_jobs(config)
     jobs = extract_jobs(config, filter_d5)
+
+    output_root = Path(config.get("meta", {}).get("default_output", "./downloads"))
+    output_root.mkdir(parents=True, exist_ok=True)
+    stats_path = output_root / "stats.md"
 
     if not jobs:
         print("没有匹配的任务，请检查 --d5 参数或 YAML 配置。")
         return
 
+    if args.stats:
+        stats = collect_stats(stats_jobs, output_root)
+        write_stats_md(stats, stats_path)
+        print(f"统计表已生成：{stats_path.resolve()}")
+        total_dl = sum(g["downloaded"] for g in stats["groups"].values())
+        print(f"总进度：{total_dl} / {stats['global_target']} 张，唯一图片：{stats['unique_total']} 张")
+        return
+
     total_target = sum(j["count"] for j in jobs)
     total_search_req = sum(math.ceil(j["count"] / 30) for j in jobs)
-    estimated_hours = total_search_req / args.rate_limit
+    # --fetch-exif 每张额外 1 次 /photos/{id} 请求，计入速率估算
+    total_api_req = total_search_req + (total_target if args.fetch_exif else 0)
+    estimated_hours = total_api_req / args.rate_limit
 
     print(f"共 {len(jobs)} 个下载任务，目标图片总数：{total_target} 张")
-    print(f"估算 search 请求：{total_search_req} 次，约需 {estimated_hours:.1f} 小时（API 等待）")
+    exif_note = f"（含 EXIF 请求 {total_target} 次）" if args.fetch_exif else ""
+    print(f"估算 API 请求：{total_api_req} 次{exif_note}，约需 {estimated_hours:.1f} 小时（API 等待）")
 
     if args.dry_run:
         print("\n[Dry Run] 任务列表：")
@@ -270,9 +381,6 @@ def main():
             )
         return
 
-    # 全局去重注册表：在所有 job 之间共享
-    output_root = Path(config.get("meta", {}).get("default_output", "./downloads"))
-    output_root.mkdir(parents=True, exist_ok=True)
     global_registry = load_global_registry(output_root)
     print(f"全局注册表已加载，已记录 {len(global_registry)} 张图片")
 
@@ -283,16 +391,19 @@ def main():
     skipped = 0
     for i, job in enumerate(jobs, 1):
         print(f"\n[{i}/{len(jobs)}] D5={job['d5']} | '{job['query']}'")
-        n = run_job(job, access_key, rate_limiter, global_registry, output_root)
+        n = run_job(job, access_key, rate_limiter, global_registry, output_root, fetch_exif=args.fetch_exif)
         if n == 0 and (job["count"] - len(load_progress(
             Path(job["output_dir"]) / "progress.json"
         ))) <= 0:
             skipped += 1
         total_downloaded += n
+        # 每完成一个 job，实时更新统计表
+        write_stats_md(collect_stats(stats_jobs, output_root), stats_path)
 
     print(f"\n{'='*50}")
     print(f"全部完成！本次处理 {total_downloaded} 张，跳过已完成任务 {skipped} 个")
     print(f"全局注册表共记录 {len(global_registry)} 张唯一图片")
+    print(f"统计表：{stats_path.resolve()}")
 
 
 if __name__ == "__main__":
