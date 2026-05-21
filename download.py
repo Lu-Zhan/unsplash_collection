@@ -131,6 +131,13 @@ def save_metadata(
         json.dump(meta, f, ensure_ascii=False, indent=2)
 
 
+def get_pexels_api_key() -> str:
+    key = os.getenv("PEXELS_API_KEY")
+    if not key or key == "your_pexels_api_key_here":
+        sys.exit("错误：请在 .env 文件中设置 PEXELS_API_KEY")
+    return key
+
+
 def main():
     parser = argparse.ArgumentParser(description="Unsplash 图片批量下载工具")
     parser.add_argument("-q", "--query", required=True, help="搜索关键词")
