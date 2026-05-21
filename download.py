@@ -87,7 +87,7 @@ def download_image(url: str, dest: Path) -> bool:
         return False
 
 
-def save_metadata(photo: dict, dest: Path):
+def save_metadata(photo: dict, dest: Path, labels: dict | None = None):
     meta = {
         "id": photo.get("id"),
         "description": photo.get("description"),
@@ -103,6 +103,8 @@ def save_metadata(photo: dict, dest: Path):
         },
         "links": photo.get("links"),
     }
+    if labels:
+        meta["labels"] = labels
     with open(dest, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
 

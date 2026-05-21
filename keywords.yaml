@@ -1,0 +1,322 @@
+# Unsplash 关键词配置 - Relighting Dataset
+# 按图像标注 schema（D5 特殊光照）组织
+# 用法：python batch_download.py [--d5 <类型>] [--dry-run]
+
+meta:
+  default_size: "regular"
+  default_count: 50
+  default_output: "./downloads"
+
+# ─────────────────────────────────────────
+# 人像专属光照（仅 d2=portrait 适用）
+# ─────────────────────────────────────────
+portrait_lighting:
+
+  rembrandt:
+    d5: rembrandt
+    d2: portrait
+    jobs:
+      - query: "rembrandt lighting portrait"
+        count: 50
+      - query: "chiaroscuro portrait"
+        count: 50
+      - query: "dramatic portrait side lighting"
+        count: 50
+
+  butterfly:
+    d5: butterfly
+    d2: portrait
+    jobs:
+      - query: "butterfly lighting portrait"
+        count: 30
+      - query: "glamour portrait studio lighting"
+        count: 50
+      - query: "fashion portrait front lighting"
+        count: 50
+
+  split:
+    d5: split
+    d2: portrait
+    jobs:
+      - query: "split lighting portrait"
+        count: 50
+      - query: "half face shadow portrait"
+        count: 50
+      - query: "dramatic shadow face photography"
+        count: 50
+
+  flat:
+    d5: flat
+    d2: portrait
+    jobs:
+      - query: "soft light portrait studio"
+        count: 50
+      - query: "beauty dish portrait"
+        count: 50
+      - query: "diffused light portrait"
+        count: 50
+
+# ─────────────────────────────────────────
+# 色彩驱动光照
+# ─────────────────────────────────────────
+color_lighting:
+
+  cyberpunk_neon:
+    d5: cyberpunk_neon
+    jobs:
+      - query: "neon light portrait"
+        count: 80
+        d2: portrait
+      - query: "cyberpunk neon city"
+        count: 80
+        d2: architecture
+      - query: "neon glow photography"
+        count: 50
+        d2: object
+      - query: "neon light architecture"
+        count: 50
+        d2: architecture
+      - query: "cyberpunk street photography"
+        count: 50
+        d2: no_dominant_subject
+
+  teal_orange:
+    d5: teal_orange
+    jobs:
+      - query: "teal orange portrait"
+        count: 80
+        d2: portrait
+      - query: "cinematic teal orange"
+        count: 80
+        d2: no_dominant_subject
+      - query: "golden hour teal"
+        count: 50
+        d2: no_dominant_subject
+
+  moonlight_cool_mono:
+    d5: moonlight_cool_mono
+    jobs:
+      - query: "moonlight portrait"
+        count: 80
+        d2: portrait
+      - query: "cool blue light photography"
+        count: 50
+        d2: no_dominant_subject
+      - query: "monochrome blue portrait"
+        count: 50
+        d2: portrait
+      - query: "night portrait cold light"
+        count: 50
+        d2: portrait
+
+# ─────────────────────────────────────────
+# 时间段光照
+# ─────────────────────────────────────────
+time_lighting:
+
+  golden_hour:
+    d5: golden_hour
+    jobs:
+      - query: "golden hour portrait"
+        count: 80
+        d2: portrait
+      - query: "golden hour landscape"
+        count: 80
+        d2: plant
+      - query: "golden hour architecture"
+        count: 80
+        d2: architecture
+      - query: "warm sunset light"
+        count: 50
+        d2: no_dominant_subject
+      - query: "golden hour food photography"
+        count: 50
+        d2: food
+
+  blue_hour:
+    d5: blue_hour
+    jobs:
+      - query: "blue hour city"
+        count: 80
+        d2: architecture
+      - query: "blue hour photography"
+        count: 80
+        d2: no_dominant_subject
+      - query: "twilight architecture"
+        count: 50
+        d2: architecture
+      - query: "blue hour portrait"
+        count: 50
+        d2: portrait
+
+  harsh_midday:
+    d5: harsh_midday
+    jobs:
+      - query: "harsh sunlight shadows"
+        count: 50
+        d2: no_dominant_subject
+      - query: "hard light shadow portrait"
+        count: 50
+        d2: portrait
+      - query: "high contrast sunlight"
+        count: 50
+        d2: no_dominant_subject
+      - query: "midday sun street photography"
+        count: 50
+        d2: no_dominant_subject
+
+  overcast:
+    d5: overcast
+    jobs:
+      - query: "overcast portrait"
+        count: 50
+        d2: portrait
+      - query: "soft overcast light"
+        count: 50
+        d2: no_dominant_subject
+      - query: "foggy landscape"
+        count: 80
+        d2: plant
+      - query: "diffused natural light"
+        count: 50
+        d2: no_dominant_subject
+
+# ─────────────────────────────────────────
+# 光学现象
+# ─────────────────────────────────────────
+optical_lighting:
+
+  rim_light:
+    d5: rim_light
+    jobs:
+      - query: "rim light portrait"
+        count: 80
+        d2: portrait
+      - query: "rim lighting photography"
+        count: 80
+        d2: no_dominant_subject
+      - query: "rim light product photography"
+        count: 50
+        d2: object
+      - query: "hair light portrait"
+        count: 50
+        d2: portrait
+
+  tyndall:
+    d5: tyndall
+    jobs:
+      - query: "god rays forest"
+        count: 80
+        d2: plant
+      - query: "light rays through trees"
+        count: 80
+        d2: plant
+      - query: "tyndall effect photography"
+        count: 50
+        d2: no_dominant_subject
+      - query: "sunbeam forest"
+        count: 80
+        d2: plant
+      - query: "crepuscular rays"
+        count: 50
+        d2: no_dominant_subject
+
+  window_pattern:
+    d5: window_pattern
+    jobs:
+      - query: "window light portrait"
+        count: 80
+        d2: portrait
+      - query: "window shadow pattern"
+        count: 50
+        d2: no_dominant_subject
+      - query: "blinds shadow portrait"
+        count: 50
+        d2: portrait
+      - query: "lattice shadow light"
+        count: 50
+        d2: no_dominant_subject
+
+  silhouette:
+    d5: silhouette
+    jobs:
+      - query: "silhouette portrait"
+        count: 80
+        d2: portrait
+      - query: "silhouette sunset"
+        count: 80
+        d2: no_dominant_subject
+      - query: "silhouette architecture"
+        count: 80
+        d2: architecture
+      - query: "backlit silhouette"
+        count: 80
+        d2: no_dominant_subject
+      - query: "silhouette animal wildlife"
+        count: 80
+        d2: animal
+
+# ─────────────────────────────────────────
+# 材质特性（d2=object 主导）
+# ─────────────────────────────────────────
+material_object:
+
+  diffuse_matte:
+    d5: diffuse_matte
+    d2: object
+    jobs:
+      - query: "matte ceramic product photography"
+        count: 50
+      - query: "terracotta pottery texture"
+        count: 50
+      - query: "rough stone texture macro"
+        count: 50
+      - query: "linen fabric flat lay"
+        count: 50
+      - query: "chalk powder macro"
+        count: 30
+
+  specular_glossy:
+    d5: specular_glossy
+    d2: object
+    jobs:
+      - query: "chrome metal product photography"
+        count: 50
+      - query: "polished steel reflection"
+        count: 50
+      - query: "glossy ceramic object"
+        count: 50
+      - query: "metallic sphere studio"
+        count: 50
+      - query: "shiny luxury product still life"
+        count: 50
+
+  translucent:
+    d5: translucent
+    d2: object
+    jobs:
+      - query: "frosted glass lamp photography"
+        count: 50
+      - query: "wax candle macro light"
+        count: 50
+      - query: "jade gemstone macro"
+        count: 50
+      - query: "translucent petal backlight"
+        count: 50
+      - query: "onyx marble backlit"
+        count: 50
+
+  transparent:
+    d5: transparent
+    d2: object
+    jobs:
+      - query: "clear glass object photography"
+        count: 50
+      - query: "crystal glass refraction"
+        count: 50
+      - query: "water droplet macro photography"
+        count: 50
+      - query: "soap bubble photography"
+        count: 50
+      - query: "transparent bottle product"
+        count: 50
