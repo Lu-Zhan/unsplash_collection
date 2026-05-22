@@ -67,8 +67,13 @@ class RateLimiter:
         next_hour = (now // 3600 + 1) * 3600
         return next_hour - now + 5
 
+    def reset_time_str(self) -> str:
+        now = int(time.time())
+        ts = self.reset_ts if self.reset_ts > now else (now // 3600 + 1) * 3600
+        return datetime.datetime.fromtimestamp(ts).strftime("%H:%M:%S")
+
     def wait_if_exhausted(self):
-        if self.remaining <= 1:
+        if self.remaining <= 3:
             wait_sec = self.seconds_until_reset()
             mins, secs = divmod(wait_sec, 60)
             print(f"\n[配额耗尽] 剩余 {self.remaining} 次，等待 {mins}分{secs}秒 直到窗口重置...")
@@ -229,8 +234,7 @@ def search_photos_with_ratelimit(
             timeout=30,
         )
         rate_limiter.update(resp.headers)
-        reset_time = datetime.datetime.fromtimestamp(rate_limiter.reset_ts).strftime("%H:%M:%S") if rate_limiter.reset_ts else "unknown"
-        print(f"  [配额] 剩余 {rate_limiter.remaining}/50，窗口重置于 {reset_time}")
+        print(f"  [配额] 剩余 {rate_limiter.remaining}/50，窗口重置于 {rate_limiter.reset_time_str()}")
 
         if resp.status_code == 403:
             wait_sec = rate_limiter.seconds_until_reset()
